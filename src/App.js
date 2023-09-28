@@ -11,25 +11,16 @@ import Form from "react-bootstrap/Form";
 import { Container } from 'react-bootstrap';
 import Dropdown from 'react-bootstrap/Dropdown'
 import axios from 'axios';
-import { getCurrentFormattedDate, refactorToAMPM,formatTime,convertToUTC, mapTasks } from './libs/helpers';
+import { getCurrentFormattedDate, refactorToAMPM, formatTime, convertToUTC, mapTasks } from './libs/helpers';
+import { getTaskTypes } from './api-requests/getTaskTypes';
+import { getTasks } from './api-requests/getTasks';
 
 import ReminderList from './components/ReminderList';
 
 
-const recurrenceOptions = [
-  { label: "Weekly" },
-  { label: "Biweekly" },
-  { label: "Triweekly" },
-  { label: "Monthly" },
-];
-
-const reminderOptions = [
-  { label: "Follow up" },
-  { label: "Call back" },
-  { label: "Review" },
-  { label: "Meeting" },
-  { label: "Deadline" },
-];
+const token = 'PKH8Q~XnWPU1GPYAXJgDFRgEeTqLEjzfvt7XrbWI';
+const ownerId = 'bcbfcbe5-5b6b-e911-a9c1-000d3a3abdb6';
+const patientId = 'e5c18358-6564-ed11-9561-0022480813af';
 
 function App() {
 
@@ -48,7 +39,7 @@ function App() {
   const [reminder, setReminder] = useState({
     date: null,
     type: '',
-    recurrence: isRecurence ? recurrenceOptions[0].label : "",
+    recurrence: isRecurence ? reccuurenceTypes[0]?.recurrenceType : "",
     description: ''
   })
   const [isReminderValid, setIsReminderValid] = useState({
@@ -59,12 +50,15 @@ function App() {
 
   const [remindersList, setRemindersList] = useState([])
   const [reccuurenceTypes, setReccuurenceTypes] = useState([])
+  const [taskTypes, setTaskTypes] = useState([])
+
+
 
   console.log('isReminderValid', isReminderValid)
   // Handle the change event to update the selected value
   const toggleAddReminder = () => {
     setIsAddReminder(!isAddReminder)
-    setReminder({ ...reminder, recurrence: recurrenceOptions[0].label })
+    setReminder({ ...reminder, recurrence: reccuurenceTypes[0]?.recurrenceType })
   }
 
   const handleSelectReminder = (e) => {
@@ -187,42 +181,12 @@ function App() {
   // Call submitNewTask when needed, e.g., in a button click event handler
 
 
-
-  async function getTasks(ownerId, patientId) {
-    const url = `https://nlr.azurewebsites.net/api/CRMPlatform/Sales/Appointment/V1/GetTasks?ownerId=${ownerId}&patientId=${patientId}`;
-
-    const headers = {
-      accept: "text/plain",
-      "x-user-token": "PKH8Q~XnWPU1GPYAXJgDFRgEeTqLEjzfvt7XrbWI",
-    };
-
-    const axiosConfig = {
-      method: "get",
-      url: url,
-      headers: headers,
-    };
-
-    try {
-      const response = await axios(axiosConfig);
-
-      if (response.status !== 200) {
-        // Handle non-successful responses here
-        throw new Error(`Request failed with status: ${response.status}`);
-      }
-
-      return response.data;
-    } catch (error) {
-      // Handle any errors that occurred during the request
-      throw error;
-    }
-  }
-
-  async function getRecurrenceType() {
+  async function getRecurrenceType(token) {
     try {
       const url = 'https://nlr.azurewebsites.net/api/CRMPlatform/Sales/Appointment/V1/GetRecurrenceType';
       const headers = {
         'accept': 'text/plain',
-        'x-user-token': 'PKH8Q~XnWPU1GPYAXJgDFRgEeTqLEjzfvt7XrbWI',
+        'x-user-token': token,
         'Prefer': 'odata.include-annotations="OData.Community.Display.V1.FormattedValue"'
       };
 
@@ -243,20 +207,16 @@ function App() {
     }
   }
 
-
-
-
   // Usage example:
   async function fetchTasks() {
     try {
-      const ownerId = "bcbfcbe5-5b6b-e911-a9c1-000d3a3abdb6";
-      const patientId = "e5c18358-6564-ed11-9561-0022480813af";
-      const tasks = await getTasks(ownerId, patientId);
+      const tasks = await getTasks(ownerId, patientId, token);
 
       const mappedTasks = mapTasks(tasks);
       console.log(mappedTasks, 'mappedTasks')
       setRemindersList(mappedTasks)
       console.log("Tasks:", tasks);
+      return mappedTasks;
       // Handle the tasks data as needed
     } catch (error) {
       console.error("Error:", error);
@@ -267,13 +227,18 @@ function App() {
   console.log('remindersList', remindersList)
 
 
-
   useEffect(() => {
     fetchTasks()
-    getRecurrenceType()
+    getRecurrenceType(token)
       .then(reccTypes => {
         setReccuurenceTypes(reccTypes)
         console.log('dataRecurrence', reccTypes)
+      })
+      .catch(error => console.log('error', error))
+
+    getTaskTypes({ ownerId, patientId, token })
+      .then(taskTypes => {
+        setTaskTypes(taskTypes)
       })
       .catch(error => console.log('error', error))
     return () => {
@@ -282,6 +247,7 @@ function App() {
   }, [])
 
 
+  console.log(taskTypes, 'taskTypes')
 
 
   return (
@@ -301,7 +267,6 @@ function App() {
                   referenceDate={dayjs(formattedDate)}
                   className={`${isReminderValid.date ? '' : 'border-danger'}`}
                 />
-                {/* <p style={{ visibility: `${isReminderValid.date ? "hidden" : "visible"}` }} className='text-danger m-0 mt-1'>Please select the date</p> */}
               </LocalizationProvider>
               <div className="col-md-6">
 
@@ -312,8 +277,8 @@ function App() {
                   onChange={handleSelectReminder} // Set the state variable to the value selected by the user
                 >
                   <option value="">Please select a reminder type</option>
-                  {reminderOptions.map((option, index) => (
-                    <option key={option.label} value={option.label}>{option.label}</option>
+                  {taskTypes.map((option, index) => (
+                    <option key={option.taskType} value={option.taskType}>{option.taskType}</option>
                   ))}
 
                 </Form.Select>
