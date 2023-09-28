@@ -1,17 +1,21 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import './App.css';
 import 'bootstrap/dist/css/bootstrap.css';
 import Button from 'react-bootstrap/Button';
-// import Container from 'react-bootstrap/Container';
 import Header from './components/Header';
 import { DateTimePicker } from '@mui/x-date-pickers';
 import dayjs from 'dayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import Form from "react-bootstrap/Form";
-import { ButtonToolbar, ToggleButtonGroup, ToggleButton, FloatingLabel, Container } from 'react-bootstrap';
-import Box from '@mui/material/Box';
+import { Container } from 'react-bootstrap';
 import Dropdown from 'react-bootstrap/Dropdown'
+import axios from 'axios';
+import { getCurrentFormattedDate, refactorToAMPM,formatTime,convertToUTC, mapTasks } from './libs/helpers';
+
+import ReminderList from './components/ReminderList';
+
+
 const recurrenceOptions = [
   { label: "Weekly" },
   { label: "Biweekly" },
@@ -36,13 +40,11 @@ function App() {
   const day = String(dateObj.getDate()).padStart(2, "0");
   const hours = String(dateObj.getHours()).padStart(2, "0");
   const minutes = String(dateObj.getMinutes()).padStart(2, "0");
-  const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}`;
+  const formattedDate = `${year}/${month}/${day} ${hours}:${minutes}`;
   const currentDate = new Date();
 
   const [isAddReminder, setIsAddReminder] = useState(false)
-  const [dateTime, setDateTime] = useState(null);
   const [isRecurence, setIsRecurence] = useState(false)
-  const [reminderType, setReminderType] = useState('')
   const [reminder, setReminder] = useState({
     date: null,
     type: '',
@@ -55,7 +57,10 @@ function App() {
     description: true
   })
 
-  console.log('isReminderValid',isReminderValid)
+  const [remindersList, setRemindersList] = useState([])
+  const [reccuurenceTypes, setReccuurenceTypes] = useState([])
+
+  console.log('isReminderValid', isReminderValid)
   // Handle the change event to update the selected value
   const toggleAddReminder = () => {
     setIsAddReminder(!isAddReminder)
@@ -83,24 +88,201 @@ function App() {
     setIsReminderValid({ ...isReminderValid, description: e.target.value !== '' })
   }
 
-  const submitReminder = async () => {
+  const areAllValuesValid = (validatedReminder) => {
+    return Object.values(validatedReminder).every((isValid) => isValid);
+  };
+
+
+  async function sendPostTaskRequest() {
+    const url = "https://nlr.azurewebsites.net/api/CRMPlatform/Sales/Appointment/V1/PostTask";
+
+    const headers = {
+      accept: "application/json",
+      "x-user-token": "PKH8Q~XnWPU1GPYAXJgDFRgEeTqLEjzfvt7XrbWI",
+      "Content-Type": "application/json", // Set Content-Type to application/json
+    };
     const validatedReminder = {
       date: reminder.date ? true : false,
       type: reminder.type ? true : false,
       description: reminder.description ? true : false
     }
+
+
+
+    const params = [
+      {
+        "StartTime": "9/26/2023 1:00:00 PM",
+        "DueDate": reminder.date,
+        "Subject": reminder.type,
+        "Description": reminder.description,
+        "CreatedBy": "bcbfcbe5-5b6b-e911-a9c1-000d3a3abdb6",
+        "TaskType": reminder.type,
+        "Recurrence": isRecurence,
+        "RecurringType": isRecurence ? reminder.recurrence : "None",
+        "Patient": "e5c18358-6564-ed11-9561-0022480813af"
+      }
+    ];
+    console.log('params', params)
     setIsReminderValid(validatedReminder)
     const isReminderValid = areAllValuesValid(validatedReminder)
-    if (isReminderValid) {
-      console.log('if', isReminderValid)
-    } else {
-      console.log('else', isReminderValid)
+    if (!isReminderValid) return;
+    console.log('if', isReminderValid)
+    setIsAddReminder(false)
+    setIsRecurence(false)
+    setReminder(prev => ({ ...prev, date: null, type: '', recurrence: "None", description: '' }))
+
+    const startTime = getCurrentFormattedDate()
+    const requestBody = [
+      {
+        "StartTime": convertToUTC(formattedDate),
+        // StartTime: "9/26/2023 1:00:00 PM",
+        // DueDate: reminder.date,
+        "DueDate": convertToUTC(reminder.date),
+        "Subject": reminder.type,
+        "Description": reminder.description,
+        "CreatedBy": "bcbfcbe5-5b6b-e911-a9c1-000d3a3abdb6",
+        "TaskType": reminder.type,
+        "Recurrence": String(isRecurence),
+        "RecurringType": isRecurence ? reminder.recurrence : "None",
+        "Patient": "e5c18358-6564-ed11-9561-0022480813af"
+      }
+    ];
+
+
+    const axiosConfig = {
+      method: "post",
+      url: url,
+      headers: headers,
+      data: requestBody,
+    };
+
+    try {
+      const response = await axios(axiosConfig);
+
+      if (response.status !== 200) {
+        // Handle non-successful responses here
+        throw new Error(`Request failed with status: ${response.status}`);
+      }
+      fetchTasks()
+      return response.data;
+    } catch (error) {
+      // Handle any errors that occurred during the request
+      throw error;
     }
-    console.log('submitReminder', reminder, 'isReminderValid', isReminderValid)
   }
-  const areAllValuesValid = (validatedReminder) => {
-    return Object.values(validatedReminder).every((isValid) => isValid);
-  };
+
+
+  // Usage example:
+  async function submitNewTask() {
+    try {
+      const responseData = await sendPostTaskRequest();
+      console.log("Response Data:", responseData);
+      // Handle the response data as needed
+    } catch (error) {
+      console.error("Error:", error);
+      // Handle errors
+    }
+  }
+
+  // Call submitNewTask when needed, e.g., in a button click event handler
+
+
+
+  async function getTasks(ownerId, patientId) {
+    const url = `https://nlr.azurewebsites.net/api/CRMPlatform/Sales/Appointment/V1/GetTasks?ownerId=${ownerId}&patientId=${patientId}`;
+
+    const headers = {
+      accept: "text/plain",
+      "x-user-token": "PKH8Q~XnWPU1GPYAXJgDFRgEeTqLEjzfvt7XrbWI",
+    };
+
+    const axiosConfig = {
+      method: "get",
+      url: url,
+      headers: headers,
+    };
+
+    try {
+      const response = await axios(axiosConfig);
+
+      if (response.status !== 200) {
+        // Handle non-successful responses here
+        throw new Error(`Request failed with status: ${response.status}`);
+      }
+
+      return response.data;
+    } catch (error) {
+      // Handle any errors that occurred during the request
+      throw error;
+    }
+  }
+
+  async function getRecurrenceType() {
+    try {
+      const url = 'https://nlr.azurewebsites.net/api/CRMPlatform/Sales/Appointment/V1/GetRecurrenceType';
+      const headers = {
+        'accept': 'text/plain',
+        'x-user-token': 'PKH8Q~XnWPU1GPYAXJgDFRgEeTqLEjzfvt7XrbWI',
+        'Prefer': 'odata.include-annotations="OData.Community.Display.V1.FormattedValue"'
+      };
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: headers
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data;
+      } else {
+        throw new Error(`Failed to fetch data. Status: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      throw error;
+    }
+  }
+
+
+
+
+  // Usage example:
+  async function fetchTasks() {
+    try {
+      const ownerId = "bcbfcbe5-5b6b-e911-a9c1-000d3a3abdb6";
+      const patientId = "e5c18358-6564-ed11-9561-0022480813af";
+      const tasks = await getTasks(ownerId, patientId);
+
+      const mappedTasks = mapTasks(tasks);
+      console.log(mappedTasks, 'mappedTasks')
+      setRemindersList(mappedTasks)
+      console.log("Tasks:", tasks);
+      // Handle the tasks data as needed
+    } catch (error) {
+      console.error("Error:", error);
+      // Handle errors
+    }
+  }
+
+  console.log('remindersList', remindersList)
+
+
+
+  useEffect(() => {
+    fetchTasks()
+    getRecurrenceType()
+      .then(reccTypes => {
+        setReccuurenceTypes(reccTypes)
+        console.log('dataRecurrence', reccTypes)
+      })
+      .catch(error => console.log('error', error))
+    return () => {
+
+    }
+  }, [])
+
+
+
 
   return (
     <>
@@ -150,16 +332,15 @@ function App() {
               {isRecurence && (
                 <div className="radio-btns d-flex flex-column gap-3 mb-5">
                   {
-                    recurrenceOptions.map((option, index) => (
+                    reccuurenceTypes.map((option, index) => (
                       <Form.Check
-                        key={option.label}
+                        key={option.recurrenceType}
                         inline
-                        label={option.label}
+                        label={option.recurrenceType}
                         name="recurrence"
                         type={'radio'}
-                        checked={reminder.recurrence === option.label}
-                        // checked={reminder.recurrence === option.label}
-                        onClick={() => handleSetRecurrence(option.label)}
+                        checked={reminder.recurrence === option.recurrenceType}
+                        onClick={() => handleSetRecurrence(option.recurrenceType)}
                       />
                     ))
                   }
@@ -172,8 +353,10 @@ function App() {
                     <Form.Label>Description</Form.Label>
                     <Form.Control className={`${isReminderValid.description ? '' : 'border-danger'}`} as="textarea" rows={5} value={reminder.description} onChange={handleDescription} />
                   </Form.Group>
-                  <Button className='my-auto' onClick={submitReminder}>Submit</Button>
+                  <Button className='my-auto' onClick={submitNewTask}>Submit</Button>
+                  {/* <Button className='my-auto' onClick={submitReminder}>Submit</Button> */}
                 </Form>
+
               </div>
             </div>
           )}
@@ -181,42 +364,7 @@ function App() {
 
           <div className="reminders-list">
             <h5>List of reminders</h5>
-
-            <Dropdown className='mb-3'>
-              <Dropdown.Toggle variant="outline-danger" id="dropdown-basic" className='w-100 text-start'>
-                Follow up
-              </Dropdown.Toggle>
-
-              <Dropdown.Menu className='w-100 text-start'>
-                <Dropdown.Item href="#/action-1">Action</Dropdown.Item>
-                <Dropdown.Item href="#/action-2">Another action</Dropdown.Item>
-                <Dropdown.Item href="#/action-3">Something else</Dropdown.Item>
-              </Dropdown.Menu>
-            </Dropdown>
-
-            <Dropdown className='mb-3'>
-              <Dropdown.Toggle variant="outline-warning" id="dropdown-basic" className='w-100 text-start'>
-                Call back
-              </Dropdown.Toggle>
-
-              <Dropdown.Menu className='w-100 text-start'>
-                <Dropdown.Item href="#/action-1">Action</Dropdown.Item>
-                <Dropdown.Item href="#/action-2">Another action</Dropdown.Item>
-                <Dropdown.Item href="#/action-3">Something else</Dropdown.Item>
-              </Dropdown.Menu>
-            </Dropdown>
-
-            <Dropdown className='mb-3'>
-              <Dropdown.Toggle variant="outline-success" id="dropdown-basic" className='w-100 text-start'>
-                Check Patent
-              </Dropdown.Toggle>
-
-              <Dropdown.Menu className='w-100 text-start'>
-                <Dropdown.Item href="#/action-1">Action</Dropdown.Item>
-                <Dropdown.Item href="#/action-2">Another action</Dropdown.Item>
-                <Dropdown.Item href="#/action-3">Something else</Dropdown.Item>
-              </Dropdown.Menu>
-            </Dropdown>
+            <ReminderList remindersList={remindersList} fetchTasks={fetchTasks} />
           </div>
 
 
