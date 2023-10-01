@@ -9,33 +9,32 @@ import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import Form from "react-bootstrap/Form";
 import { Container } from 'react-bootstrap';
-import Dropdown from 'react-bootstrap/Dropdown'
 import axios from 'axios';
-import { getCurrentFormattedDate, refactorToAMPM, formatTime, convertToUTC, mapTasks } from './libs/helpers';
+import { getCurrentFormattedDate, refactorToAMPM, formatTime, convertToUTC, mapTasks, formatedDate } from './libs/helpers';
 import { getTaskTypes } from './api-requests/getTaskTypes';
 import { getTasks } from './api-requests/getTasks';
 
 import ReminderList from './components/ReminderList';
 
+const { ownerId: ownerIdFromPage, patientId: patientIdFromPage } = window;
 
 const token = 'PKH8Q~XnWPU1GPYAXJgDFRgEeTqLEjzfvt7XrbWI';
-const ownerId = 'bcbfcbe5-5b6b-e911-a9c1-000d3a3abdb6';
-const patientId = 'e5c18358-6564-ed11-9561-0022480813af';
+
+const ownerId = ownerIdFromPage ? ownerIdFromPage.replace(/[{}]/g, "") : 'bcbfcbe5-5b6b-e911-a9c1-000d3a3abdb6';
+const patientId = patientIdFromPage ? patientIdFromPage.replace(/[{}]/g, "") : 'e5c18358-6564-ed11-9561-0022480813af';
+// const ownerId = JSON.parse(window.parent.Xrm.Page.context.getUserId()).replace(/[{}]/g, "") ?? 'bcbfcbe5-5b6b-e911-a9c1-000d3a3abdb6';
+// const patientId = JSON.parse(Xrm.Page.data.entity.getId()).replace(/[{}]/g, "") ?? 'e5c18358-6564-ed11-9561-0022480813af';
+
+
 
 function App() {
 
-  const minDate = new Date()
-  const dateObj = new Date();
-  const year = dateObj.getFullYear();
-  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
-  const day = String(dateObj.getDate()).padStart(2, "0");
-  const hours = String(dateObj.getHours()).padStart(2, "0");
-  const minutes = String(dateObj.getMinutes()).padStart(2, "0");
-  const formattedDate = `${year}/${month}/${day} ${hours}:${minutes}`;
-  const currentDate = new Date();
 
+  const formattedDate = formatedDate();
+  const currentDate = new Date();
   const [isAddReminder, setIsAddReminder] = useState(false)
   const [isRecurence, setIsRecurence] = useState(false)
+  const [reccuurenceTypes, setReccuurenceTypes] = useState([])
   const [reminder, setReminder] = useState({
     date: null,
     type: '',
@@ -47,14 +46,11 @@ function App() {
     type: true,
     description: true
   })
-
   const [remindersList, setRemindersList] = useState([])
-  const [reccuurenceTypes, setReccuurenceTypes] = useState([])
   const [taskTypes, setTaskTypes] = useState([])
 
 
 
-  console.log('isReminderValid', isReminderValid)
   // Handle the change event to update the selected value
   const toggleAddReminder = () => {
     setIsAddReminder(!isAddReminder)
@@ -87,12 +83,12 @@ function App() {
   };
 
 
-  async function sendPostTaskRequest() {
+  async function sendPostTaskRequest(token) {
     const url = "https://nlr.azurewebsites.net/api/CRMPlatform/Sales/Appointment/V1/PostTask";
 
     const headers = {
       accept: "application/json",
-      "x-user-token": "PKH8Q~XnWPU1GPYAXJgDFRgEeTqLEjzfvt7XrbWI",
+      "x-user-token": token,
       "Content-Type": "application/json", // Set Content-Type to application/json
     };
     const validatedReminder = {
@@ -101,53 +97,36 @@ function App() {
       description: reminder.description ? true : false
     }
 
-
-
-    const params = [
-      {
-        "StartTime": "9/26/2023 1:00:00 PM",
-        "DueDate": reminder.date,
-        "Subject": reminder.type,
-        "Description": reminder.description,
-        "CreatedBy": "bcbfcbe5-5b6b-e911-a9c1-000d3a3abdb6",
-        "TaskType": reminder.type,
-        "Recurrence": isRecurence,
-        "RecurringType": isRecurence ? reminder.recurrence : "None",
-        "Patient": "e5c18358-6564-ed11-9561-0022480813af"
-      }
-    ];
-    console.log('params', params)
     setIsReminderValid(validatedReminder)
     const isReminderValid = areAllValuesValid(validatedReminder)
     if (!isReminderValid) return;
-    console.log('if', isReminderValid)
     setIsAddReminder(false)
     setIsRecurence(false)
     setReminder(prev => ({ ...prev, date: null, type: '', recurrence: "None", description: '' }))
 
-    const startTime = getCurrentFormattedDate()
     const requestBody = [
       {
         "StartTime": convertToUTC(formattedDate),
-        // StartTime: "9/26/2023 1:00:00 PM",
-        // DueDate: reminder.date,
         "DueDate": convertToUTC(reminder.date),
         "Subject": reminder.type,
         "Description": reminder.description,
-        "CreatedBy": "bcbfcbe5-5b6b-e911-a9c1-000d3a3abdb6",
+        "CreatedBy": ownerId,
         "TaskType": reminder.type,
         "Recurrence": String(isRecurence),
         "RecurringType": isRecurence ? reminder.recurrence : "None",
-        "Patient": "e5c18358-6564-ed11-9561-0022480813af"
+        "Patient": patientId,
       }
     ];
-
 
     const axiosConfig = {
       method: "post",
       url: url,
       headers: headers,
       data: requestBody,
+      // params:{
+      //   ownerId: ownerId,
+      //   patientId: patientId
+      // }
     };
 
     try {
@@ -169,7 +148,7 @@ function App() {
   // Usage example:
   async function submitNewTask() {
     try {
-      const responseData = await sendPostTaskRequest();
+      const responseData = await sendPostTaskRequest(token);
       console.log("Response Data:", responseData);
       // Handle the response data as needed
     } catch (error) {
@@ -213,9 +192,9 @@ function App() {
       const tasks = await getTasks(ownerId, patientId, token);
 
       const mappedTasks = mapTasks(tasks);
-      console.log(mappedTasks, 'mappedTasks')
+      // console.log(mappedTasks, 'mappedTasks')
       setRemindersList(mappedTasks)
-      console.log("Tasks:", tasks);
+      // console.log("Tasks:", tasks);
       return mappedTasks;
       // Handle the tasks data as needed
     } catch (error) {
@@ -224,15 +203,15 @@ function App() {
     }
   }
 
-  console.log('remindersList', remindersList)
+  // console.log('remindersList', remindersList)
 
 
   useEffect(() => {
-    fetchTasks()
+    fetchTasks(ownerId, patientId, token)
     getRecurrenceType(token)
       .then(reccTypes => {
         setReccuurenceTypes(reccTypes)
-        console.log('dataRecurrence', reccTypes)
+        // console.log('dataRecurrence', reccTypes)
       })
       .catch(error => console.log('error', error))
 
@@ -247,14 +226,14 @@ function App() {
   }, [])
 
 
-  console.log(taskTypes, 'taskTypes')
+  // console.log(taskTypes, 'taskTypes')
 
 
   return (
     <>
       <Header onBtnClick={toggleAddReminder} />
       <main>
-        <Container>
+        <Container fluid>
           {isAddReminder && (
             <div className="add-reminder-wrapper">
               <LocalizationProvider dateAdapter={AdapterDayjs}

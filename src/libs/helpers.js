@@ -111,3 +111,37 @@ export const mapTasks = (tasks) => {
 
   return remindersBySubject;
 };
+
+export function formatedDate(){
+  const dateObj = new Date();
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const day = String(dateObj.getDate()).padStart(2, "0");
+  const hours = String(dateObj.getHours()).padStart(2, "0");
+  const minutes = String(dateObj.getMinutes()).padStart(2, "0");
+  return  `${year}/${month}/${day} ${hours}:${minutes}`;
+}
+
+export function convertTime(inputTime) {
+  const date = new Date(inputTime);
+
+  if (isNaN(date.getTime())) {
+    return "Invalid Date";
+  }
+
+  // Subtract 4 hours from the date
+  date.setUTCHours(date.getUTCHours() - 4);
+
+  // Format the date and time in the desired format
+  const year = date.getUTCFullYear();
+  const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+  const day = date.getUTCDate().toString().padStart(2, '0');
+  const hours = date.getUTCHours();
+  const minutes = date.getUTCMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const formattedHours = hours % 12 || 12; // Convert 0 to 12 for 12-hour format
+
+  const formattedDateTime = `${year}-${month}-${day} ${formattedHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+
+  return formattedDateTime;
+}

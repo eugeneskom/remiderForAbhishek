@@ -6,7 +6,7 @@ function Header({onBtnClick}) {
   return (
     <div className="header">
       <Navbar expand="lg" className="bg-body-tertiary p-3 mb-3">
-        <Container>
+        <Container fluid>
           <Button onClick={onBtnClick}>Add a reminder +</Button>
         </Container>
       </Navbar>

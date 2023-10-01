@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Form } from 'react-bootstrap';
 import { Accordion } from 'react-bootstrap';
 import axios from 'axios';
+import { convertTime } from '../libs/helpers';
 
 function getRandomColor() {
   const letters = '0123456789ABCDEF';
@@ -150,10 +151,6 @@ function ReminderList({ remindersList, fetchTasks }) {
                 style={{ right: "3rem" }}
               >
                 {
-
-                  console.log(remindersList[subject], subject)
-                }
-                {
                   checkDueDateStatuses(remindersList[subject]).map((status, index) => (
                     <div key={index} className={`rounded-circle ${status} border-danger p-2`}></div>
                   ))}
@@ -179,7 +176,8 @@ function ReminderList({ remindersList, fetchTasks }) {
                   <h6>
                     {reminder.description}
                   </h6>
-                  <p>{reminder.scheduledEnd}</p>
+                  <p>{convertTime(reminder.scheduledEnd)}</p>
+                  {/* <p>{reminder.scheduledEnd}</p> */}
                 </div>
               ))}
             </Accordion.Body>
